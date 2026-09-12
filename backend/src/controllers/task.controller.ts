@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { TaskStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/ApiError';
@@ -142,7 +143,7 @@ export const updateTask = asyncHandler(async (req: Request, res: Response) => {
  * In Review — the owning PM is notified.
  */
 export const updateTaskStatus = asyncHandler(async (req: Request, res: Response) => {
-  const { status } = req.body;
+  const { status } = req.body as { status: TaskStatus };
 
   const existing = await prisma.task.findFirst({
     where: { id: req.params.id, ...taskScopeWhere(req.user!) },
