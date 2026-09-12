@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PM
+  DEVELOPER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_IN_REVIEW
+  TASK_OVERDUE
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+
+  // Projects this user (PM/Admin) created
+  createdProjects Project[]      @relation("ProjectCreator")
+  assignedTasks   Task[]         @relation("TaskAssignee")
+  activityEvents  ActivityLog[]  @relation("ActivityActor")
+  notifications   Notification[]
+  refreshTokens   RefreshToken[]
+
+  @@index([role])
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Client {
+  id        String    @id @default(uuid())
+  name      String
+  createdAt DateTime  @default(now())
+  projects  Project[]
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  createdById String
+  createdBy   User     @relation("ProjectCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  tasks         Task[]
+  activityLog   ActivityLog[]
+
+  // A PM can only manage projects they created — enforced in the query layer
+  // (WHERE createdById = req.user.id), this index makes that filter cheap.
+  @@index([createdById])
+  @@index([clientId])
+}
+
+model Task {
+  id            String       @id @default(uuid())
+  seq           Int          @default(autoincrement()) // human-facing "Task #<seq>" in the feed
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  assignedToId  String?
+  assignedTo    User?        @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  status        TaskStatus   @default(TODO)
+  priority      TaskPriority @default(MEDIUM)
+  dueDate       DateTime?
+  isOverdue     Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  activityLog   ActivityLog[]
+  notifications Notification[]
+
+  // Every list/board/dashboard view filters by one or more of these —
+  // see Technology_Decisions.md #3 for the reasoning behind each index.
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([projectId, status])
+  @@index([dueDate])
+}
+
+model ActivityLog {
+  id         String     @id @default(uuid())
+  seq        Int        @default(autoincrement()) // monotonically increasing — used for missed-event catch-up (?since=<seq>), since UUIDs aren't chronologically sortable
+  projectId  String
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId     String?
+  task       Task?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  userId     String?    // null for system-generated events (e.g. the overdue sweep job)
+  user       User?      @relation("ActivityActor", fields: [userId], references: [id])
+  action     String     // e.g. "STATUS_CHANGE", "TASK_CREATED", "TASK_ASSIGNED", "OVERDUE_FLAGGED"
+  fromStatus TaskStatus?
+  toStatus   TaskStatus?
+  message    String      // pre-rendered human-readable line, e.g. "Ravi moved Task #12 from In Progress to In Review"
+  createdAt  DateTime   @default(now())
+
+  // Feed queries are always "latest N for project X" or "latest N overall for admin"
+  @@index([projectId, createdAt])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  message   String
+  taskId    String?
+  task      Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  // Badge count is WHERE userId = ? AND read = false, ordered by createdAt
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
