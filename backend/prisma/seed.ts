@@ -12,31 +12,60 @@ async function hashed() {
 async function main() {
   console.log('Seeding database...');
 
-  // ---- Users -------------------------------------------------------------
+  // ---- Reset demo data (safe to re-run) -----------------------------------
+  // Users and RefreshTokens are deliberately NOT wiped here — that would log
+  // everyone out and throw away any role/name edits made via Prisma Studio
+  // that aren't meant to be reset. Everything else (clients/projects/tasks/
+  // activity/notifications) has no natural unique key to upsert against, so
+  // instead we delete and recreate it fresh every run, in FK-safe order.
+  await prisma.notification.deleteMany();
+  await prisma.activityLog.deleteMany();
+  await prisma.task.deleteMany();
+  await prisma.project.deleteMany();
+  await prisma.client.deleteMany();
+
+  // ---- Users ---------------------------------------------------------------
   const passwordHash = await hashed();
 
-  const admin = await prisma.user.create({
-    data: { name: 'Asha Menon', email: 'admin@velozity.dev', role: 'ADMIN', passwordHash },
+  // upsert (not create) so re-running the seed never errors on the unique
+  // email constraint, and any manual edit to name/role gets reset back to
+  // the seed values on the next run instead of silently sticking around.
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@velozity.dev' },
+    update: { name: 'Tajinderpal Singh', role: 'ADMIN', passwordHash },
+    create: { name: 'Tajinderpal Singh', email: 'admin@velozity.dev', role: 'ADMIN', passwordHash },
   });
 
-  const pm1 = await prisma.user.create({
-    data: { name: 'Rahul Verma', email: 'pm1@velozity.dev', role: 'PM', passwordHash },
+  const pm1 = await prisma.user.upsert({
+    where: { email: 'pm1@velozity.dev' },
+    update: { name: 'Rahul Verma', role: 'PM', passwordHash },
+    create: { name: 'Rahul Verma', email: 'pm1@velozity.dev', role: 'PM', passwordHash },
   });
-  const pm2 = await prisma.user.create({
-    data: { name: 'Sneha Kapoor', email: 'pm2@velozity.dev', role: 'PM', passwordHash },
+  const pm2 = await prisma.user.upsert({
+    where: { email: 'pm2@velozity.dev' },
+    update: { name: 'Sneha Kapoor', role: 'PM', passwordHash },
+    create: { name: 'Sneha Kapoor', email: 'pm2@velozity.dev', role: 'PM', passwordHash },
   });
 
-  const dev1 = await prisma.user.create({
-    data: { name: 'Ravi Shankar', email: 'dev1@velozity.dev', role: 'DEVELOPER', passwordHash },
+  const dev1 = await prisma.user.upsert({
+    where: { email: 'dev1@velozity.dev' },
+    update: { name: 'Ravi Shankar', role: 'DEVELOPER', passwordHash },
+    create: { name: 'Ravi Shankar', email: 'dev1@velozity.dev', role: 'DEVELOPER', passwordHash },
   });
-  const dev2 = await prisma.user.create({
-    data: { name: 'Priya Nair', email: 'dev2@velozity.dev', role: 'DEVELOPER', passwordHash },
+  const dev2 = await prisma.user.upsert({
+    where: { email: 'dev2@velozity.dev' },
+    update: { name: 'Priya Nair', role: 'DEVELOPER', passwordHash },
+    create: { name: 'Priya Nair', email: 'dev2@velozity.dev', role: 'DEVELOPER', passwordHash },
   });
-  const dev3 = await prisma.user.create({
-    data: { name: 'Karan Malhotra', email: 'dev3@velozity.dev', role: 'DEVELOPER', passwordHash },
+  const dev3 = await prisma.user.upsert({
+    where: { email: 'dev3@velozity.dev' },
+    update: { name: 'Karan Malhotra', role: 'DEVELOPER', passwordHash },
+    create: { name: 'Karan Malhotra', email: 'dev3@velozity.dev', role: 'DEVELOPER', passwordHash },
   });
-  const dev4 = await prisma.user.create({
-    data: { name: 'Fatima Sheikh', email: 'dev4@velozity.dev', role: 'DEVELOPER', passwordHash },
+  const dev4 = await prisma.user.upsert({
+    where: { email: 'dev4@velozity.dev' },
+    update: { name: 'Fatima Sheikh', role: 'DEVELOPER', passwordHash },
+    create: { name: 'Fatima Sheikh', email: 'dev4@velozity.dev', role: 'DEVELOPER', passwordHash },
   });
 
   // ---- Clients -------------------------------------------------------------
@@ -117,7 +146,7 @@ async function main() {
     { title: 'Design fleet map component', description: 'Map with vehicle clustering.', assignedToId: dev3.id, status: 'DONE', priority: 'HIGH', dueDate: daysFromNow(-5) },
     { title: 'Delivery ETA calculation', description: 'Estimate ETA from route + traffic data.', assignedToId: dev4.id, status: 'TODO', priority: 'HIGH', dueDate: daysFromNow(-1), forceOverdue: true },
     { title: 'Driver status badges', description: 'Online/offline/on-break indicators.', assignedToId: dev4.id, status: 'IN_REVIEW', priority: 'MEDIUM', dueDate: daysFromNow(4) },
-    { title: 'Historical route playback', description: 'Replay a vehicle\'s route for a given day.', assignedToId: null, status: 'TODO', priority: 'LOW', dueDate: daysFromNow(20) },
+    { title: 'Historical route playback', description: "Replay a vehicle's route for a given day.", assignedToId: null, status: 'TODO', priority: 'LOW', dueDate: daysFromNow(20) },
   ]);
 
   const tasksC = await seedProjectTasks(projectC.id, [
